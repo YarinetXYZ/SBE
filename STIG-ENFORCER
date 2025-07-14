@@ -1,0 +1,82 @@
+Write-Host @"
+#########################################################################
+#  ____ _____ ___ ____   _____ _   _ _____ ___  ____   ____ _____ ____  #
+# / ___|_   _|_ _/ ___| | ____| \ | |  ___/ _ \|  _ \ / ___| ____|  _ \ #
+# \___ \ | |  | | |  _  |  _| |  \| | |_ | | | | |_) | |   |  _| | |_) |#
+#  ___) || |  | | |_| | | |___| |\  |  _|| |_| |  _ <| |___| |___|  _ < #
+# |____/ |_| |___\____| |_____|_| \_|_|   \___/|_| \_\\____|_____|_| \_\#
+#                                                                       #
+#########################################################################
+By Yarinet v1.0
+"@
+
+### LOGGING ###
+$LogFile = "C:\Temp\STIG-Remediation.log"
+if (!(Test-Path $logFile)) { New-Item -ItemType File -Path $LogFile -Force | Out-Null }
+
+function Write-Log {
+    param ($message, $level = "Information")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "$timestamp [$level] $message"
+    Write-Host $logEntry
+    Add-Content -Path $LogFile -Value $logEntry
+}
+
+### REGISTRY KEY REMEDIATION FUNCTION ###
+function Apply-RegistryFix {
+    param ($id, $path, $name, $value)
+    try {
+        if (!(Test-Path $path)) {
+            New-Item -Path $path -Force | Out-Null
+            Write-Log "$($id): Created missing registry path $path"
+        }
+        Set-ItemProperty -Path $path -Name $name -Value $value
+        Write-Log "$($id): Set $name to $value in $path"
+    } catch {
+        Write-Log "$($id): Failed to set registry key. Error: $_" "ERROR"
+    }
+}
+
+### SERVICE REMEDIATION FUNCTIOn ###
+function Apply-ServiceFix {
+    param ($id, $name, $state, $startupType)
+    try {
+        Set-Service -Name $name -StartupType $startupType
+        if ($state -eq "Stopped") {
+            Stop-Service -Name $name -Force
+        }
+        Write-Log "$($id): Set service '$name' to $startupType, state $state"
+    } catch {
+        Write-Log "$($id): Failed to configure service '$name'. Error: $_" "ERROR"
+    }
+}
+
+### COMMAND REMEDIATION FUNCTION ###
+function Apply-CommandFix {
+    param ($id, $command)
+    try {
+        Invoke-Expression $command
+        Write-Log "$($id): Ran command: $command"
+    } catch {
+        Write-Log "$($id): Failed to run command. Error: $_" "ERROR"
+    }
+}
+
+### REMEDIATIONS ###
+$Remediations = @(
+    ##@{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer; Name = "NoAutoPlay"; Value = 1 }, 
+    ##@{ ID = "V-XXXXX"; Type = "Service"; Name = "wuauserv"; State = "Stopped"; StartupType = "Disabled" },
+    ##@{ ID = "V-YYYYY"; Type = "Command"; Command = "icacls C:\SensitiveFolder /inheritance:r" }
+)
+
+### REMEDIATION ENFORCER LOOP ###
+foreach ($remediation in $Remediations) {
+    switch ($remediation.Type) {
+        "Registry" { Apply-RegistryFix -id $remediation.ID -path $remediation.Path -name $remediation.Name -value $remediation.Value }
+        ##"Service"  { Apply-ServiceFix -id $remediation.ID -name $remediation.Name -state $remediation.State -startupType $remediation.StartupType }
+        ##"Command"  { Apply-CommandFix -id $remediation.ID -command $remediation.Command }
+        ##default    { Write-Log "$($remediation.ID): Unknown fix type '$($remediation.Type)'" "ERROR" }
+    }
+}
+
+
