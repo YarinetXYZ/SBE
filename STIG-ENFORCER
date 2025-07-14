@@ -64,7 +64,7 @@ function Apply-CommandFix {
 
 ### REMEDIATIONS ###
 $Remediations = @(
-    ##@{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer; Name = "NoAutoPlay"; Value = 1 }, 
+    @{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 } 
     ##@{ ID = "V-XXXXX"; Type = "Service"; Name = "wuauserv"; State = "Stopped"; StartupType = "Disabled" },
     ##@{ ID = "V-YYYYY"; Type = "Command"; Command = "icacls C:\SensitiveFolder /inheritance:r" }
 )
@@ -73,10 +73,7 @@ $Remediations = @(
 foreach ($remediation in $Remediations) {
     switch ($remediation.Type) {
         "Registry" { Apply-RegistryFix -id $remediation.ID -path $remediation.Path -name $remediation.Name -value $remediation.Value }
-        ##"Service"  { Apply-ServiceFix -id $remediation.ID -name $remediation.Name -state $remediation.State -startupType $remediation.StartupType }
-        ##"Command"  { Apply-CommandFix -id $remediation.ID -command $remediation.Command }
-        ##default    { Write-Log "$($remediation.ID): Unknown fix type '$($remediation.Type)'" "ERROR" }
+        "Service"  { Apply-ServiceFix -id $remediation.ID -name $remediation.Name -state $remediation.State -startupType $remediation.StartupType }
+        "Command"  { Apply-CommandFix -id $remediation.ID -command $remediation.Command }
     }
 }
-
-
