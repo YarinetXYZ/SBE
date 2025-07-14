@@ -75,11 +75,26 @@ function Check-BitLockerProtection {
     $global:Results += @{ ID = $id; Message = $msg; Status = ($status ? "Success" : "Fail") }
 }
 
+function Check-V220706 {
+    $id = "V-220706"
+    $build = [int](Get-ComputerInfo -Property OsBuildNumber).OsBuildNumber
+    $cutoff = [datetime]"2025-10-14"
+    try {
+        $date = [datetime]::Parse((Invoke-WebRequest https://www.microsoft.com -UseBasicParsing).Headers["Date"])
+    } catch {
+        $date = Get-Date
+    }
+    $status = if ($build -ge 19045 -and $date -lt $cutoff) { "Success" } else { "Fail" }
+    $msg = "Build: $build, Date: $($date.ToShortDateString())"
+    $global:Results += @{ ID = $id; Message = $msg; Status = $status }
+}
+
 ### REMEDIATIONS ###
 $Remediations = @(
     @{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 },
     @{ ID = "V-220827"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlayfornonVolume"; Value = 1 }
-    @{ ID = "V-BITLOCKER-001"; Type = "BitLocker" }
+    @{ ID = "V-220702"; Type = "BitLocker" }
+    @{ ID = "V-220706"; Type = "Command"; Command = "Check-STIGV220706" }
     ##@{ ID = "V-XXXXX"; Type = "Service"; Name = "wuauserv"; State = "Stopped"; StartupType = "Disabled" },
     ##@{ ID = "V-YYYYY"; Type = "Command"; Command = "icacls C:\SensitiveFolder /inheritance:r" }
 )
@@ -102,7 +117,6 @@ foreach ($result in $Results) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Host "$timestamp [Information] $($result.ID): $($result.Message)" -ForegroundColor $color
 }
-
 
 Write-Host "Press any key to close this window..." -ForegroundColor Yellow
 [System.Console]::ReadKey($true)| Out-Null
