@@ -31,10 +31,10 @@ function Apply-RegistryFix {
         }
         Set-ItemProperty -Path $path -Name $name -Value $value
         Write-Log "$($id): Set $name to $value in $path"
-        $Results += @{ID=$id; Message="Set $name to $value in $path"; Status="Success"}
+        $global:Results += @{ID=$id; Message="Set $name to $value in $path"; Status="Success"}
     } catch {
         Write-Log "$($id): Failed to set registry key. Error: $_" "ERROR"
-        $Results += @{ID=$id; Message="Failed to set registry key in $path"; Status="Fail"}
+        $global:Results += @{ID=$id; Message="Failed to set registry key in $path"; Status="Fail"}
     }
 }
 
@@ -47,10 +47,10 @@ function Apply-ServiceFix {
             Stop-Service -Name $name -Force
         }
         Write-Log "$($id): Set service '$name' to $startupType, state $state"
-        $Results += @{ID=$id; Message="Set service '$name' to $startupType, state $state"; Status="Success"}
+        $global:Results += @{ID=$id; Message="Set service '$name' to $startupType, state $state"; Status="Success"}
     } catch {
         Write-Log "$($id): Failed to configure service '$name'. Error: $_" "ERROR"
-        $Results += @{ID=$id; Message="Failed to configure service '$name'"; Status="Fail"}
+        $global:Results += @{ID=$id; Message="Failed to configure service '$name'"; Status="Fail"}
     }
 }
 
@@ -60,16 +60,17 @@ function Apply-CommandFix {
     try {
         Invoke-Expression $command
         Write-Log "$($id): Ran command: $command"
-        $Results += @{ID=$id; Message="Ran command: $command"; Status="Success"}
+        $global:Results += @{ID=$id; Message="Ran command: $command"; Status="Success"}
     } catch {
         Write-Log "$($id): Failed to run command. Error: $_" "ERROR"
-        $Results += @{ID=$id; Message="Failed to run command"; Status="Fail"}
+        $global:Results += @{ID=$id; Message="Failed to run command"; Status="Fail"}
     }
 }
 
 ### REMEDIATIONS ###
 $Remediations = @(
-    @{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 } 
+    @{ ID = "V-220829"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 },
+    @{ ID = "V-220827"; Type = "Registry"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlayfornonVolume"; Value = 1 } 
     ##@{ ID = "V-XXXXX"; Type = "Service"; Name = "wuauserv"; State = "Stopped"; StartupType = "Disabled" },
     ##@{ ID = "V-YYYYY"; Type = "Command"; Command = "icacls C:\SensitiveFolder /inheritance:r" }
 )
@@ -91,3 +92,8 @@ foreach ($result in $Results) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Host "$timestamp [Information] $($result.ID): $($result.Message)" -ForegroundColor $color
 }
+
+
+Write-Host "Press any key to close this window..." -ForegroundColor Yellow
+[System.Console]::ReadKey($true)| Out-Null
+Stop-Process -Id $PID
