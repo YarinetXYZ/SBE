@@ -1,0 +1,784 @@
+
+Write-Host ""
+Write-Host "################################################################################" -ForegroundColor Cyan
+Write-Host "#                          STIG COMPLIANCE REPORT                             #" -ForegroundColor Cyan
+Write-Host "################################################################################" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "By Yarinet v2.15 - HIGH ENFORCER" -ForegroundColor Magenta
+
+
+# TOGGLE CONFIG OPTIONS / WHITELISTED EVENTS
+$script:Config = @{
+    LogFile = "C:\Temp\STIG-Remediation.log"
+    ReportPath = "C:\AdminAuditLogs\STIG_Report_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
+    RemoveUnauthorizedTasks = $true
+    RemoveUnauthorizedAdmins = $true
+    StopUnauthorizedServices = $false
+    ApprovedAdmins = @(
+        "BUILTIN\Administrators",
+        "$env:COMPUTERNAME\Administrator",
+        "$env:COMPUTERNAME\LocalAdmin",
+        "$env:COMPUTERNAME\Yarinet"
+    )
+    TaskExclusionList = @(
+        "^BraveSoftwareUpdateTaskMachine",
+        "^MicrosoftEdgeUpdateTaskMachine",
+        "^OneDrive",
+        "^GoogleUpdaterTaskSystem",
+        "^npcapwatchdog"
+    )
+        ApprovedServiceAccounts = @(
+        "NT SERVICE\MSSQLSERVER",
+        "NT SERVICE\WinDefend",
+        "DOMAIN\ServiceAccount",
+        "$env:COMPUTERNAME\MySvcUser"
+    )
+}
+
+$global:Results = @()
+$global:STIGCompliance = @{}
+
+# STIG REQUIREMENT MAPPING FINAL OUTPUT OVERVIEW
+$script:STIGRequirements = @{
+    "V-220702" = "BitLocker Drive Encryption - System drives must be encrypted"
+    "V-220706" = "Windows Version Compliance - Must be supported version"
+    "V-220707" = "Windows Defender - Real-time protection must be enabled"
+    "V-220708" = "File System - System drive must be formatted with NTFS"
+    "V-220727" = "Structured Exception Handling - Chain validation must be enabled"
+    "V-220823" = "Remote Assistance - Must be disabled"
+    "V-220827" = "AutoPlay - Must be disabled for non-volume devices"
+    "V-220828" = "AutoRun - Must be disabled for all drives"
+    "V-220829" = "AutoPlay - Must be disabled for all media and devices"
+    "V-220857" = "Windows Installer - Always install elevated must be disabled"
+    "V-220862" = "WinRM Client - Basic authentication must be disabled"
+    "V-220865" = "WinRM Service - Basic authentication must be disabled"
+    "V-XYZZYX" = "Security Policy Baseline - Applied from repository"
+    "V-220967" = "Debug Programs Right - Only assigned to administrators group"
+    "V-220963" = "Create Token Object - Not assigned to any groups or accounts"
+    "V-220958" = "Act as OS - Not assigned to any groups or accounts"
+    "V-220938" = "LanMan Authentication - Set as NTLMv2, refuse LM and NTLM"
+    "V-220937" = "Lan Manager Passwords - Prevent local storage of passwords"
+    "V-220932" = "Named Pipes & Shares - Anonymous access restricted"
+    "V-220930" = "Share Enumeration - Anonymous access restricted"
+    "V-220929" = "SAM Accounts - Anonymous ccess restricted"
+    "V-220928" = "SID/Name Enumeration - Anonymous access restricted"
+    "V-220726" = "Data Execution Prevention - Set to atleast OptOut"
+    "V-220712" = "Administrator Rights - Restricted"
+    "V-220718" = "Internet Information Systems (IIS) - Components not installed"
+    "V-220737" = "Administrator Account - Disabled with external facing applications"
+}
+#END-REGION
+
+function Parse-SecurityPolicy {
+    param (
+        [Parameter(Mandatory)]
+        [string]$CfgFile
+    )
+
+    secedit /export /cfg "$CfgFile" | Out-Null
+
+    $content = Get-Content $CfgFile -Raw
+    $sections = @{}
+    $sectionHeaders = [regex]::Matches($content, "(?<=\[)(.*?)(?=\])")
+
+    for ($i = 0; $i -lt $sectionHeaders.Count; $i++) {
+        $header = $sectionHeaders[$i].Value
+        $sectionPattern = if ($i -lt $sectionHeaders.Count - 1) {
+            "(?<=\[$header\])([\s\S]*?)(?=\[)"
+        } else {
+            "(?<=\[$header\])([\s\S]*)"
+        }
+
+        $sectionMatch = [regex]::Match($content, $sectionPattern)
+        $sectionData = @{}
+
+        foreach ($line in $sectionMatch.Groups[1].Value -split "`r?`n") {
+            if ($line -match "=") {
+                $name, $value = $line -split "=", 2
+                $sectionData[$name.Trim()] = $value.Trim()
+            }
+        }
+
+        $sections[$header] = New-Object PSObject -Property $sectionData
+    }
+
+    return New-Object PSObject -Property $sections
+}
+
+function Set-SecurityPolicy {
+    param (
+        [Parameter(Mandatory)]
+        [psobject]$PolicyObject,
+
+        [Parameter(Mandatory)]
+        [string]$CfgFile
+    )
+
+    $lines = @()
+
+    foreach ($section in $PolicyObject.PSObject.Properties) {
+        $lines += "[$($section.Name)]"
+        foreach ($property in $section.Value.PSObject.Properties) {
+            $lines += "$($property.Name)=$($property.Value)"
+        }
+        $lines += "" 
+    }
+
+    $lines | Out-File -FilePath $CfgFile -Encoding Unicode -Force
+
+    secedit /configure /db "$env:SystemRoot\security\database\local.sdb" /cfg "$CfgFile" /areas SECURITYPOLICY | Out-Null
+}
+
+# LOGGING / COMPLIANCE STATUS / RESULTS TABLE
+if (!(Test-Path (Split-Path $script:Config.LogFile))) { 
+    New-Item -ItemType Directory -Path (Split-Path $script:Config.LogFile) -Force | Out-Null 
+}
+if (!(Test-Path (Split-Path $script:Config.ReportPath))) { 
+    New-Item -ItemType Directory -Path (Split-Path $script:Config.ReportPath) -Force | Out-Null 
+}
+
+function Write-Log {
+    param (
+        [string]$Message,
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS")]
+        [string]$Level = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "$timestamp [$Level] $Message"
+    Add-Content -Path $script:Config.LogFile -Value $logEntry -ErrorAction SilentlyContinue
+    
+    $color = switch ($Level) {
+        "INFO" { "White" }
+        "WARN" { "Yellow" }
+        "ERROR" { "Red" }
+        "SUCCESS" { "Green" }
+        default { "White" }
+    }
+    
+    Write-Host $logEntry -ForegroundColor $color
+}
+
+function Set-STIGCompliance {
+    param (
+        [string]$STIGId,
+        [ValidateSet("IN COMPLIANCE", "NON-COMPLIANT", "NOT APPLICABLE")]
+        [string]$Status
+    )
+    
+    $global:STIGCompliance[$STIGId] = $Status
+}
+
+function Add-Result {
+    param (
+        [string]$Id,
+        [string]$Message,
+        [ValidateSet("Success", "Fail")]
+        [string]$Status
+    )
+    
+    $global:Results += @{
+        ID = $Id
+        Message = $Message
+        Status = $Status
+        Timestamp = Get-Date
+    }
+    
+    if ($Status -eq "Success") {
+        Set-STIGCompliance -STIGId $Id -Status "IN COMPLIANCE"
+    } else {
+        Set-STIGCompliance -STIGId $Id -Status "NON-COMPLIANT"
+    }
+}
+#END-REGION
+
+#V-220712 UNAUTHORIZED POLICIES
+function Remove-UnauthorizedScheduledTasks {
+    Write-Log "Scanning for unauthorized scheduled tasks..." "INFO"
+    
+    try {
+        $suspiciousTasks = Get-ScheduledTask | Where-Object {
+            $_.Principal -and
+            ($_.Principal.UserId -eq "SYSTEM" -or $_.Principal.RunLevel -eq "Highest") -and
+            $_.TaskPath -notmatch "^(\\Microsoft\\|\\Windows\\)"
+        } | Where-Object {
+            $taskName = $_.TaskName
+            -not ($script:Config.TaskExclusionList | Where-Object { $taskName -match $_ })
+        }
+        
+        foreach ($task in $suspiciousTasks) {
+            $taskFullName = "$($task.TaskPath)$($task.TaskName)"
+            Write-Log "Unauthorized Task: $taskFullName" "WARN"
+            
+            if ($script:Config.RemoveUnauthorizedTasks) {
+                try {
+                    $taskPath = if ($task.TaskPath.EndsWith("\")) { $task.TaskPath } else { "$($task.TaskPath)\" }
+                    Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+                    Write-Log "Removed Unauthorized Task: $taskFullName" "SUCCESS"
+                } catch {
+                    Write-Log "Failed to remove task: $taskFullName - $_" "ERROR"
+                }
+            }
+        }
+        
+        Write-Log "Remediated $($suspiciousTasks.Count) suspicious scheduled tasks" "INFO"
+        
+    } catch {
+        Write-Log "Failed to scan scheduled tasks: $_" "ERROR"
+    }
+}
+
+function Remove-UnauthorizedAdministrators {
+    Write-Log "Checking For Unauthorized Administrators..." "INFO"
+    
+    try {
+        $adminGroup = Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop
+        
+        foreach ($admin in $adminGroup) {
+            $isApproved = $script:Config.ApprovedAdmins -contains $admin.Name
+            
+            if (-not $isApproved) {
+                Write-Log "Unauthorized Administrator: $($admin.Name)" "WARN"
+                
+                if ($script:Config.RemoveUnauthorizedAdmins) {
+                    try {
+                        Remove-LocalGroupMember -Group "Administrators" -Member $admin.Name -ErrorAction Stop
+                        Write-Log "Removed Unauthorized Administrator: $($admin.Name)" "SUCCESS"
+                    } catch {
+                        Write-Log "Failed to remove administrator: $($admin.Name) - $_" "ERROR"
+                    }
+                }
+            } else {
+                Write-Log "Approved administrator: REDACTED" "INFO"
+            }
+        }
+        
+    } catch {
+        Write-Log "Failed to scan administrator accounts: $_" "ERROR"
+    }
+}
+
+function Remove-UnauthorizedAccountsAndServices {
+    param ([string]$Id = "V-220712")
+
+    Write-Log "Scanning for unauthorized admin accounts and services..." "INFO"
+
+    try {
+        $normalizedApproved = $script:Config.ApprovedAdmins | ForEach-Object {
+            ($_ -replace "^BUILTIN\\|^$env:COMPUTERNAME\\", "")
+        }
+
+        $adminsRemediated = 0; $servicesRemediated = 0
+        $unauthorizedUsers = @(); $unauthorizedServices = @()
+
+        $groups = @(
+            "Administrators", "Backup Operators", "Power Users",
+            "Remote Desktop Users", "Hyper-V Administrators",
+            "Network Configuration Operators", "Distributed COM Users"
+        )
+
+        foreach ($group in $groups) {
+            try {
+                Get-LocalGroupMember -Group $group -ErrorAction Stop | Where-Object {
+                    $_.ObjectClass -eq 'User' -and
+                    -not ($normalizedApproved -contains ($_.Name -replace "^.*\\", ""))
+                } | ForEach-Object {
+                    $unauthorizedUsers += "$($_.Name) (Group: ${group})"
+                        Write-Log "Unauthorized Account in ${group}: $($_.Name)" "WARN"
+                    if ($script:Config.RemoveUnauthorizedAdmins) {
+                        try {
+                            Disable-LocalUser -Name ($_.Name -replace '^.*\\', '') -ErrorAction Stop
+                            Write-Log "Disabled Unauthorized Account: $($_.Name)" "SUCCESS"
+                            $adminsRemediated++
+                        } catch {
+                            Write-Log "Failed to disable account: $($_.Name) - $_" "ERROR"
+                        }
+                    }
+                }
+            } catch {
+                Write-Verbose "Group $group not accessible: $_"
+            }
+        }
+
+        Get-CimInstance Win32_Service | Where-Object {
+            $_.StartName -notmatch '^(LocalSystem|NT AUTHORITY\\(LocalService|NetworkService))$' -and
+            -not ($script:Config.ApprovedServiceAccounts -contains $_.StartName)
+        } | ForEach-Object {
+            $unauthorizedServices += "$($_.Name) - $($_.StartName)"
+            if ($script:Config.StopUnauthorizedServices) {
+                try {
+                    Stop-Service -Name $_.Name -Force -ErrorAction Stop
+                    Set-Service -Name $_.Name -StartupType Disabled
+                    Write-Log "Disabled Service: $($_.Name)" "SUCCESS"
+                    $servicesRemediated++
+                } catch {
+                    Write-Log "Failed to disable service: $($_.Name) - $_" "ERROR"
+                }
+            }
+        }
+
+        if ($adminsRemediated -or $servicesRemediated) {
+            Add-Result -Id $Id -Message "Remediated $adminsRemediated unauthorized user accounts and $servicesRemediated unauthorized services." -Status "Success"
+        } elseif ($unauthorizedUsers.Count -or $unauthorizedServices.Count) {
+            $details = @()
+            if ($unauthorizedUsers.Count) { $details += "Users: $($unauthorizedUsers -join ', ')" }
+            if ($unauthorizedServices.Count) { $details += "Services: $($unauthorizedServices -join ', ')" }
+            Add-Result -Id $Id -Message "Unauthorized entities found but not remediated: $($details -join '; ')" -Status "Fail"
+        } else {
+            Add-Result -Id $Id -Message "No unauthorized user accounts or services found." -Status "Success"
+        }
+
+    } catch {
+        Write-Log "Scan failed: $_" "ERROR"
+        Add-Result -Id $Id -Message "Error during scan: $_" -Status "Fail"
+    }
+}
+#END-REGION
+
+#INDIVIDUAL STIG REMEDIATION FUNCTIONS
+function Set-RegistryValue {
+    param (
+        [string]$Id,
+        [string]$Path,
+        [string]$Name,
+        [object]$Value,
+        [string]$ValueType = "String"
+    )
+    
+    try {
+        if (!(Test-Path $Path)) {
+            New-Item -Path $Path -Force | Out-Null
+        }
+        
+        Set-ItemProperty -Path $Path -Name $Name -Value $Value
+        
+        $actualValue = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
+        if ($actualValue.$Name -eq $Value) {
+            Add-Result -Id $Id -Message "Registry setting configured: $Name = $Value" -Status "Success"
+        } else {
+            Add-Result -Id $Id -Message "Failed to verify registry setting: $Path\$Name" -Status "Fail"
+        }
+        
+    } catch {
+        Add-Result -Id $Id -Message "Failed to set registry: $Path\$Name - $_" -Status "Fail"
+    }
+}
+
+function Test-DEPOptOut {
+    param ([string]$Id = "V-220726")
+
+    Write-Log "Checking DEP (Data Execution Prevention) policy using GetSystemDEPPolicy..." "INFO"
+
+    try {
+        $depPolicy = [System.Diagnostics.Process]::GetSystemDEPPolicy()
+
+        switch ($depPolicy) {
+            1 { $status = "Success"; $desc = "AlwaysOn" }
+            3 { $status = "Success"; $desc = "OptOut" }
+            0 { $status = "Fail";    $desc = "AlwaysOff" }
+            2 { $status = "Fail";    $desc = "OptIn" }
+            default { $status = "Fail"; $desc = "Unknown ($depPolicy)" }
+        }
+
+        Add-Result -Id $Id -Message "DEP policy is '$desc' (code: $depPolicy)" -Status $status
+    }
+    catch {
+        Add-Result -Id $Id -Message "Failed to check DEP: $_" -Status "Fail"
+    }
+}
+
+function Remove-IISFeatures {
+    param ([string]$Id = "V-220718")
+
+    try {
+        # Get IIS features only once
+        $iisFeatures = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "IIS*" }
+
+        if ($iisFeatures.Count -eq 0) {
+            Add-Result -Id $Id -Message "No IIS components installed. Already compliant." -Status "Success"
+            return
+        }
+
+        $featuresRemoved = 0
+        $featuresFailed = @()
+
+        foreach ($feature in $iisFeatures) {
+            # Only try to remove enabled features
+            if ($feature.State -eq "Enabled") {
+                try {
+                    # Run dism synchronously, waiting for completion
+                    $process = Start-Process -FilePath "dism.exe" `
+                        -ArgumentList "/Online", "/Disable-Feature", "/FeatureName:$($feature.FeatureName)", "/Remove", "/NoRestart" `
+                        -NoNewWindow -WindowStyle Hidden `
+                        -RedirectStandardOutput "$null" -RedirectStandardError "$null" `
+                        -Wait -PassThru
+
+                    # Check exit code to confirm success
+                    if ($process.ExitCode -eq 0) {
+                        $featuresRemoved++
+                    } else {
+                        $featuresFailed += $feature.FeatureName
+                    }
+                } catch {
+                    $featuresFailed += $feature.FeatureName
+                }
+            }
+        }
+
+        if ($featuresRemoved -gt 0 -and $featuresFailed.Count -eq 0) {
+            Add-Result -Id $Id -Message "Successfully removed $featuresRemoved IIS features." -Status "Success"
+        } elseif ($featuresRemoved -eq 0 -and $featuresFailed.Count -eq 0) {
+            Add-Result -Id $Id -Message "No IIS features required removal. Already compliant." -Status "Success"
+        } elseif ($featuresFailed.Count -gt 0) {
+            Add-Result -Id $Id -Message "Some IIS features failed to remove: $($featuresFailed -join ', ')" -Status "Fail"
+        }
+
+    } catch {
+        Add-Result -Id $Id -Message "Error occurred during IIS scan: $_" -Status "Fail"
+    }
+}
+
+
+function Remove-AdminInternetAccess {
+    param (
+        [string]$SourceGroup = "LogNAdministrators",
+        [string]$DenyGroup = "Deny_Internet_Admins",
+        [string[]]$AppsToRestrict = @(
+            "C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            "C:\Program Files\Mozilla Firefox\firefox.exe",
+            "C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE"
+        )
+    )
+
+    if (-not (Get-LocalGroup -Name $SourceGroup -ErrorAction SilentlyContinue)) {
+        Add-Result -Id "V-220737" -Message "Source group '$SourceGroup' missing." -Status "Fail"
+        return
+    }
+
+    if (-not (Get-LocalGroup -Name $DenyGroup -ErrorAction SilentlyContinue)) {
+        New-LocalGroup -Name $DenyGroup -Description "Admins denied internet access"
+    }
+
+    # Add members from source group to deny group
+    Get-LocalGroupMember -Group $SourceGroup | ForEach-Object {
+        try {
+            Add-LocalGroupMember -Group $DenyGroup -Member $_.Name -ErrorAction Stop
+        } catch {
+            Write-Warning ("Failed to add " + $_.Name + " to " + $DenyGroup + ": " + $_.Exception.Message)
+        }
+    }
+
+    foreach ($app in $AppsToRestrict) {
+        if (Test-Path $app) {
+            $ruleName = "Block Internet for $DenyGroup - $([IO.Path]::GetFileName($app))"
+            if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {
+                New-NetFirewallRule -DisplayName $ruleName -Direction Outbound -Program $app -Action Block -Profile Any `
+                    -Description "Block Internet access for $app for members of $DenyGroup"
+            }
+        }
+    }
+
+    Add-Result -Id "V-220737" -Message "Restrictions applied to '$DenyGroup'." -Status "Success"
+}
+
+
+
+function Test-BitLockerCompliance {
+    param ([string]$Id = "V-220702")
+
+    Write-Log "Checking BitLocker encryption status..." "INFO"
+
+    try {
+        $volumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
+
+        if (-not $volumes) {
+            Add-Result -Id $Id -Message "BitLocker not available on this system." -Status "Fail"
+            return
+        }
+
+        $systemVolume = $volumes | Where-Object { $_.MountPoint -eq 'C:' }
+
+        if (-not $systemVolume) {
+            Add-Result -Id $Id -Message "System volume (C:) not found in BitLocker volumes." -Status "Fail"
+            return
+        }
+
+        $status = $systemVolume.ProtectionStatus
+        Write-Log "C: drive ProtectionStatus = $status"
+
+        if ($status -eq 1) {
+            Add-Result -Id $Id -Message "BitLocker encryption is enabled on system drive (C:)." -Status "Success"
+        } else {
+            Add-Result -Id $Id -Message "BitLocker encryption is NOT enabled on system drive (C:)." -Status "Fail"
+        }
+
+    } catch {
+        Write-Log "$($Id): Exception during BitLocker compliance check: $_" "ERROR"
+        Add-Result -Id $Id -Message "BitLocker compliance check failed: $_" -Status "Fail"
+    }
+}
+
+function Test-WindowsVersionCompliance {
+    param ([string]$Id = "V-220706")
+    
+    Write-Log "Checking Windows version compliance..." "INFO"
+    
+    try {
+        $buildNumber = [int](Get-ComputerInfo -Property OsBuildNumber).OsBuildNumber
+        $endOfLifeDate = [datetime]"2025-10-14"
+        $currentDate = Get-Date
+        
+        $isCompliant = ($buildNumber -ge 19045) -and ($currentDate -lt $endOfLifeDate)
+        $message = "Windows build $buildNumber, EOL: $($endOfLifeDate.ToShortDateString())"
+        
+        if ($isCompliant) {
+            Add-Result -Id $Id -Message $message -Status "Success"
+        } else {
+            Add-Result -Id $Id -Message "$message - Non-compliant" -Status "Fail"
+        }
+        
+    } catch {
+        Add-Result -Id $Id -Message "Failed to check Windows version: $_" -Status "Fail"
+    }
+}
+
+function Test-WindowsDefenderStatus {
+    param ([string]$Id = "V-220707")
+    
+    Write-Log "Checking Windows Defender status..." "INFO"
+    
+    try {
+        $defenderStatus = Get-MpComputerStatus -ErrorAction Stop
+        
+        if ($defenderStatus.RealTimeProtectionEnabled) {
+            Add-Result -Id $Id -Message "Windows Defender real-time protection enabled" -Status "Success"
+        } else {
+            try {
+                Set-MpPreference -DisableRealtimeMonitoring $false
+                Add-Result -Id $Id -Message "Windows Defender real-time protection enabled" -Status "Success"
+            } catch {
+                Add-Result -Id $Id -Message "Failed to enable Windows Defender" -Status "Fail"
+            }
+        }
+        
+    } catch {
+        Add-Result -Id $Id -Message "Failed to check Windows Defender: $_" -Status "Fail"
+    }
+}
+
+function Test-FileSystemCompliance {
+    param ([string]$Id = "V-220708")
+    
+    Write-Log "Checking file system compliance..." "INFO"
+    
+    try {
+        $systemVolume = Get-Volume -DriveLetter C -ErrorAction Stop
+        
+        if ($systemVolume.FileSystem -eq "NTFS") {
+            Add-Result -Id $Id -Message "System volume formatted with NTFS" -Status "Success"
+        } else {
+            Add-Result -Id $Id -Message "System volume not formatted with NTFS" -Status "Fail"
+        }
+        
+    } catch {
+        Add-Result -Id $Id -Message "Failed to check file system: $_" -Status "Fail"
+    }
+}
+
+function Invoke-SecurityPolicyBaseline {
+    param ([string]$Id = "V-XYZZYX")
+
+    Write-Log "Applying security policy baseline..." "INFO"
+
+    $DependentItems = @(
+        "V-220967", "V-220963", "V-220958",
+        "V-220938", "V-220937", "V-220932",
+        "V-220930", "V-220929", "V-220928"
+    )
+
+    try {
+        $url = "https://raw.githubusercontent.com/YarinetXYZ/SBE/main/secpol.cfg"
+        $cfgPath = "C:\Temp\SecurityConfig.inf"
+
+        Write-Log "Downloading baseline config from: $url" "INFO"
+
+        if (!(Test-Path "C:\Temp")) {
+            New-Item -ItemType Directory -Path "C:\Temp" -Force | Out-Null
+        }
+
+        Invoke-WebRequest -Uri $url -OutFile $cfgPath -ErrorAction Stop
+
+        if ((Get-Item $cfgPath).Length -eq 0) {
+            throw "Downloaded configuration file is empty"
+        }
+
+        Get-Content $cfgPath -Raw | Out-File $cfgPath -Encoding Unicode -Force
+
+        $policy = Parse-SecurityPolicy -CfgFile $cfgPath
+
+        $policy.'System Access'.PasswordComplexity      = 1
+        $policy.'System Access'.MinimumPasswordLength   = 10
+        $policy.'System Access'.MaximumPasswordAge      = 60
+
+        Set-SecurityPolicy -PolicyObject $policy -CfgFile $cfgPath
+
+        Add-Result -Id $Id -Message "Security policy baseline applied" -Status "Success"
+
+        foreach ($item in $DependentItems) {
+            $global:Results += @{
+                ID        = $item
+                Message   = "Compliant via security policy baseline ($Id)"
+                Status    = "Success"
+                Timestamp = Get-Date
+            }
+            $global:STIGCompliance[$item] = "IN COMPLIANCE"
+        }
+
+    } catch {
+        $errorMsg = $_.Exception.Message
+        Write-Log "Security policy baseline error: $errorMsg" "ERROR"
+
+        Add-Result -Id $Id -Message "Failed to apply security policy baseline: $errorMsg" -Status "Fail"
+
+        foreach ($item in $DependentItems) {
+            $global:Results += @{
+                ID        = $item
+                Message   = "Non-compliant due to security policy baseline failure ($Id)"
+                Status    = "Fail"
+                Timestamp = Get-Date
+            }
+            $global:STIGCompliance[$item] = "NON-COMPLIANT"
+            Write-Log "STIG ${item}: NON-COMPLIANT (baseline failed)" "ERROR"
+        }
+    }
+}
+#END-REGION
+
+#STIG FINAL COMPLIANCE REPORT
+function Show-STIGComplianceReport {
+    Write-Host ""
+    Write-Host "################################################################################" -ForegroundColor Cyan
+    Write-Host "#                          STIG COMPLIANCE REPORT                             #" -ForegroundColor Cyan
+    Write-Host "################################################################################" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $compliantCount = 0
+    $nonCompliantCount = 0
+    $notCheckedCount = 0
+    
+    $sortedSTIGs = $script:STIGRequirements.GetEnumerator() | Sort-Object Name
+    
+    foreach ($stig in $sortedSTIGs) {
+        $stigId = $stig.Key
+        $description = $stig.Value
+        
+        $status = if ($global:STIGCompliance.ContainsKey($stigId)) {
+            $global:STIGCompliance[$stigId]
+        } else {
+            "NOT CHECKED"
+        }
+        
+        $color = switch ($status) {
+            "IN COMPLIANCE" { "Green"; $compliantCount++ }
+            "NON-COMPLIANT" { "Red"; $nonCompliantCount++ }
+            "NOT APPLICABLE" { "Yellow"; $compliantCount++ }
+            default { "Gray"; $notCheckedCount++ }
+        }
+        
+        $symbol = switch ($status) {
+            "IN COMPLIANCE" { "[OK]" }
+            "NON-COMPLIANT" { "[NO]" }
+            "NOT APPLICABLE" { "[N/A]" }
+            default { "[?]" }
+        }
+        
+        $statusLine = "{0,-12} {1,-15} {2}" -f $stigId, $symbol, $description
+        Write-Host $statusLine -ForegroundColor $color
+    }
+    
+    Write-Host ""
+    Write-Host "################################################################################" -ForegroundColor Cyan
+    Write-Host "#                            COMPLIANCE SUMMARY                               #" -ForegroundColor Cyan
+    Write-Host "################################################################################" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $totalSTIGs = $script:STIGRequirements.Count
+    $compliancePercentage = if ($totalSTIGs -gt 0) { [math]::Round(($compliantCount / $totalSTIGs) * 100, 2) } else { 0 }
+    
+    Write-Host "Total STIG Requirements: $totalSTIGs" -ForegroundColor White
+    Write-Host "In Compliance: $compliantCount" -ForegroundColor Green
+    Write-Host "Non-Compliant: $nonCompliantCount" -ForegroundColor Red
+    Write-Host "Not Checked: $notCheckedCount" -ForegroundColor Gray
+    Write-Host "Compliance Percentage: $compliancePercentage%" -ForegroundColor $(if ($compliancePercentage -ge 90) { "Green" } elseif ($compliancePercentage -ge 70) { "Yellow" } else { "Red" })
+    Write-Host ""
+    
+    try {
+        $reportData = @()
+        foreach ($stig in $sortedSTIGs) {
+            $status = if ($global:STIGCompliance.ContainsKey($stig.Key)) { $global:STIGCompliance[$stig.Key] } else { "NOT CHECKED" }
+            $reportData += [PSCustomObject]@{
+                STIG_ID = $stig.Key
+                Status = $status
+                Description = $stig.Value
+                Timestamp = Get-Date
+            }
+        }
+        
+        $reportData | Export-Csv -Path $script:Config.ReportPath -NoTypeInformation
+        Write-Host "Report exported to: $($script:Config.ReportPath)" -ForegroundColor Yellow
+    } catch {
+        Write-Log "Failed to export report: $_" "ERROR"
+    }
+}
+#END-REGION
+
+#STIG REMEDIATION FUNCTION
+function Start-STIGRemediation {
+    Write-Log "Starting STIG remediation process..." "INFO"
+    
+    #REMEDIATION ACTIONS
+    Remove-UnauthorizedScheduledTasks
+    Remove-UnauthorizedAdministrators
+    Remove-UnauthorizedAccountsAndServices
+    Remove-IISFeatures
+    Remove-AdminInternetAccess
+
+
+    # Registry remediations
+    $registrySettings = @(
+        @{ ID = "V-220829"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 },
+        @{ ID = "V-220827"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlayfornonVolume"; Value = 1 },
+        @{ ID = "V-220828"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoDriveTypeAutoRun"; Value = 255 },
+        @{ ID = "V-220823"; Path = 'HKLM:\System\CurrentControlSet\Control\Remote Assistance'; Name = "fAllowToGetHelp"; Value = 0 },
+        @{ ID = "V-220727"; Path = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Kernel'; Name = "DisableExceptionChainValidation"; Value = 0 },
+        @{ ID = "V-220857"; Path = 'HKLM:\Software\Policies\Microsoft\Windows\Installer'; Name = "AlwaysInstallElevated"; Value = 0 },
+        @{ ID = "V-220862"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\WSMAN\Client\Auth'; Name = "Basic"; Value = 0 },
+        @{ ID = "V-220865"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\WSMAN\Service\Auth'; Name = "Basic"; Value = 0 }
+    )
+    
+    foreach ($setting in $registrySettings) {
+        Set-RegistryValue -Id $setting.ID -Path $setting.Path -Name $setting.Name -Value $setting.Value
+    }
+    
+    #COMPLIANCE CHECKS
+    Test-BitLockerCompliance
+    Test-WindowsVersionCompliance
+    Test-WindowsDefenderStatus
+    Test-FileSystemCompliance
+    Test-DEPOptOut
+    Invoke-SecurityPolicyBaseline
+    
+    #FINAL REPORT
+    Write-Log "STIG remediation process completed" "INFO"
+    Show-STIGComplianceReport
+    
+    Write-Host "Press any key to close this window..." -ForegroundColor Yellow
+    [System.Console]::ReadKey($true)| Out-Null
+    Stop-Process -Id $PID
+}
+
+#EXECUTE STIG REMEDIATION
+
+Start-STIGRemediation
+#END-REGION
