@@ -1,7 +1,8 @@
 # STIG-BASELINE-ENFORCER
  - Developed powershell script to remediate approximately 210+ items from STIG list (https://stigviewer.com/stigs)
  - Included list of those not remediated primarily associated with (Trusted DoD Certificate Implementation, Servers / Domain Controllers / Domain Joined Systems).
- - Simplest method of implementation would be to domain enrol device and configure via OU structure with gp management console. 
+ - Simplest method of implementation would be to domain enrol device and configure via OU structure with gp management console.
+ - Didn't prepare appropriate infrastructure but aspects of script can be reconfigured for large domain environment and deployed en mas. 
 <ul>
   <li>V-220737</li>
   <li>V-220701</li>
