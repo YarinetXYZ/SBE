@@ -1996,11 +1996,6 @@ function Show-STIGComplianceReport {
 function Start-STIGRemediation {
     Write-Log "Starting STIG remediation process..." "INFO"
     
-    #REMEDIATION ACTIONS
-        #FUNCTIONS GO HERE
-
-
-    # Registry remediations
     $registrySettings = @(
 
         ##HKLM
@@ -2145,37 +2140,24 @@ function Start-STIGRemediation {
         Set-RegistryValue -Id $setting.ID -Path $setting.Path -Name $setting.Name -Value $setting.Value
     }
     
-    #COMPLIANCE CHECKS
+    #FUNCTION CALLS
     Disable-InactiveBluetooth
-    Set-AuthorizedVMUsers
-    Test-WindowsDefenderFirewall
-    Test-AlternateOperatingSystems
-    Test-NonSystemFileShares
     Invoke-SecurityPolicyBaseline
     Invoke-AuditPolicyBaseline
+    Invoke-LocalAdminPasswordExpiration
     Remove-UnauthorizedScheduledTasks
     Remove-UnauthorizedAdministrators
     Remove-UnauthorizedAccountsAndServices
     Remove-LocalAccounts
     Remove-IISFeatures
-    Test-UEFIBootMode
     Remove-AgedAccounts
     Remove-TFTPClient
     Remove-TelnetClient
     Remove-TCPIPServices
     Remove-SNMPProtocol
     Remove-OrphanedUserRights
-    Test-SecureBootStatus
-    Test-BitLockerCompliance
-    Test-WindowsVersionCompliance
-    Test-WindowsDefenderStatus
-    Test-FileSystemCompliance
-    Test-DEPOptOut
     Set-EventLogSizes 
-    Test-KernelDMAProtection
-    Invoke-LocalAdminPasswordExpiration
-    Test-EventLogPermissions
-    Test-SystemFilePermissions
+    Set-AuthorizedVMUsers
     Set-STIGsNotApplicable -StigIDs @(
         "V-220737",
         "V-220701",
@@ -2220,8 +2202,20 @@ function Start-STIGRemediation {
         "V-220847",
         "V-220705",
         "V-220907"
-    )
- 
+    ) 
+    Test-WindowsDefenderFirewall
+    Test-AlternateOperatingSystems
+    Test-NonSystemFileShares
+    Test-UEFIBootMode
+    Test-SecureBootStatus
+    Test-BitLockerCompliance
+    Test-WindowsVersionCompliance
+    Test-WindowsDefenderStatus
+    Test-FileSystemCompliance
+    Test-DEPOptOut
+    Test-KernelDMAProtection
+    Test-EventLogPermissions
+    Test-SystemFilePermissions
 
     #FINAL REPORT
     Write-Log "STIG remediation process completed" "INFO"
@@ -2233,6 +2227,6 @@ function Start-STIGRemediation {
 }
 
 #EXECUTE STIG REMEDIATION
-
 Start-STIGRemediation
+
 #END-REGION
