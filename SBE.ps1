@@ -473,16 +473,9 @@ function Invoke-SecurityPolicyBaseline {
     Write-Log "Applying security policy baseline..." "INFO"
 
     $DependentItems = @(
-        "V-220967", "V-220963", "V-220958",
-        "V-220938", "V-220937", "V-220932",
-        "V-220930", "V-220929", "V-220928",
-        "V-220983", "V-220982", "V-220981",
-        "V-220980", "V-220979", "V-220978",
-        "V-220977", "V-220976", "V-220975",
-        "V-220974", "V-220973", "V-220966",
-        "V-220965", "V-220964", "V-220962",
-        "V-220961", "V-220960", "V-220959",
-        "V-220957", "V-220956", "V-220931",
+        "V-220967", "V-220963", "V-220958", "V-220983", "V-220982", "V-220981", "V-220980", "V-220979", "V-220978", "V-220957",
+        "V-220938", "V-220937", "V-220932", "V-220977", "V-220976", "V-220975", "V-220974", "V-220973", "V-220966", "V-220956",
+        "V-220930", "V-220929", "V-220928", "V-220965", "V-220964", "V-220962", "V-220961", "V-220960", "V-220959", "V-220931",
         "V-220713"
     )
 
@@ -556,81 +549,43 @@ function Invoke-AuditPolicyBaseline {
     )
 
     $commands = @(
-        # V-220778 – System Integrity success
         'auditpol /set /subcategory:"System Integrity" /success:enable',
-        # V-220777 – System Integrity failure
         'auditpol /set /subcategory:"System Integrity" /failure:enable',
-        # V-220776 – Security System Extension success
         'auditpol /set /subcategory:"Security System Extension" /success:enable',
-        # V-220775 – Security State Change success
         'auditpol /set /subcategory:"Security State Change" /success:enable',
-        # V-220774 – Other System Events failure
         'auditpol /set /subcategory:"Other System Events" /failure:enable',
-        # V-220773 – Other System Events success
         'auditpol /set /subcategory:"Other System Events" /success:enable',
-        # V-220772 – IPSec Driver failure
         'auditpol /set /subcategory:"IPSec Driver" /failure:enable',
-        # V-220771 – Sensitive Privilege Use success
         'auditpol /set /subcategory:"Sensitive Privilege Use" /success:enable',
-        # V-220770 – Sensitive Privilege Use failure
         'auditpol /set /subcategory:"Sensitive Privilege Use" /failure:enable',
-        # V-220769 – Authorization Policy Change success
         'auditpol /set /subcategory:"Authorization Policy Change" /success:enable',
-        # V-220768 – Authentication Policy Change success
         'auditpol /set /subcategory:"Authentication Policy Change" /success:enable',
-        # V-220767 – Audit Policy Change success
         'auditpol /set /subcategory:"Audit Policy Change" /success:enable',
-        # V-220766 – Removable Storage success
         'auditpol /set /subcategory:"Removable Storage" /success:enable',
-        # V-220765 – Removable Storage failure
         'auditpol /set /subcategory:"Removable Storage" /failure:enable',
-        # V-220764 – Other Object Access Events failure
         'auditpol /set /subcategory:"Other Object Access Events" /failure:enable',
-        # V-220763 – Other Object Access Events success
         'auditpol /set /subcategory:"Other Object Access Events" /success:enable',
-        # V-220762 – File Share success
         'auditpol /set /subcategory:"File Share" /success:enable',
-        # V-220761 – File Share failure
         'auditpol /set /subcategory:"File Share" /failure:enable',
-        # V-220760 – Special Logon success
         'auditpol /set /subcategory:"Special Logon" /success:enable',
-        # V-220759 – Logon (successful) success
         'auditpol /set /subcategory:"Logon" /success:enable',
-        # V-220758 – Logon failures
         'auditpol /set /subcategory:"Logon" /failure:enable',
-        # V-220757 – Logoff success
         'auditpol /set /subcategory:"Logoff" /success:enable',
-        # V-220756 – Group Membership success
         'auditpol /set /subcategory:"Group Membership" /success:enable',
-        # V-220755 – Account Lockout failure
         'auditpol /set /subcategory:"Account Lockout" /failure:enable',
-        # V-220754 – Process Creation success
         'auditpol /set /subcategory:"Process Creation" /success:enable',
-        # V-220753 – PNP Activity successes
         'auditpol /set /subcategory:"Plug and Play Events" /success:enable',
-        # V-220752 – User Account Management success
         'auditpol /set /subcategory:"User Account Management" /success:enable',
-        # V-220751 – User Account Management failure
         'auditpol /set /subcategory:"User Account Management" /failure:enable',
-        # V-220750 – Security Group Management success
         'auditpol /set /subcategory:"Security Group Management" /success:enable',
-        # V-220749 – Credential Validation success
         'auditpol /set /subcategory:"Credential Validation" /success:enable',
-        # V-220748 – Credential Validation failure
         'auditpol /set /subcategory:"Credential Validation" /failure:enable',
-        # V-220791 – MPSSVC Rule-Level Policy Change failure
         'auditpol /set /subcategory:"MPSSVC Rule-Level Policy Change" /failure:enable',
-        # V-220790 – MPSSVC Rule-Level Policy Change success
         'auditpol /set /subcategory:"MPSSVC Rule-Level Policy Change" /success:enable',
-        # V-220789 – Detailed File Share failure
         'auditpol /set /subcategory:"Detailed File Share" /failure:enable',
-        # V-220788 – Other Logon/Logoff Events failure
         'auditpol /set /subcategory:"Other Logon/Logoff Events" /failure:enable',
-        # V-220787 – Other Logon/Logoff Events success
         'auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable',
-        # V-220786 – Other Policy Change Events failure
         'auditpol /set /subcategory:"Other Policy Change Events" /failure:enable',
-        # V-257589 – Process Creation failure (command-line)
         'auditpol /set /subcategory:"Process Creation" /failure:enable'
     )
 
@@ -832,7 +787,6 @@ function Remove-UnauthorizedAccountsAndServices {
                     $userObj  = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
                     $userSID  = if ($userObj) { $userObj.SID.Value } else { $null }
 
-                    # Skip if account SID is approved or account used recently (<35 days)
                     $recentUse = $false
                     if ($userObj -and $userObj.LastLogon -and ((Get-Date) - $userObj.LastLogon).Days -lt 35) {
                         $recentUse = $true
@@ -843,7 +797,6 @@ function Remove-UnauthorizedAccountsAndServices {
                         return
                     }
 
-                    # Not approved → unauthorized
                     $unauthorizedUsers += "$($_.Name) (Group: ${group})"
                     Write-Log "Unauthorized Account in ${group}: $($_.Name)" "WARN"
 
@@ -862,7 +815,6 @@ function Remove-UnauthorizedAccountsAndServices {
             }
         }
 
-        # Unauthorized services logic remains unchanged
         Get-CimInstance Win32_Service | Where-Object {
             $_.StartName -notmatch '^(LocalSystem|NT AUTHORITY\\(LocalService|NetworkService))$' -and
             -not ($script:Config.ApprovedServiceAccounts -contains $_.StartName)
@@ -1786,7 +1738,6 @@ function Test-AlternateOperatingSystems {
 
         foreach ($drive in $drives) {
             if ([string]::IsNullOrEmpty($drive.FileSystem)) {
-                # Skip drives without filesystem info
                 continue
             }
 
@@ -2230,3 +2181,4 @@ function Start-STIGRemediation {
 Start-STIGRemediation
 
 #END-REGION
+
