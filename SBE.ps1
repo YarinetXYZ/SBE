@@ -499,9 +499,11 @@ function Invoke-SecurityPolicyBaseline {
 
         $policy = Parse-SecurityPolicy -CfgFile $cfgPath
 
-        $policy.'System Access'.PasswordComplexity      = 1
-        $policy.'System Access'.MinimumPasswordLength   = 10
-        $policy.'System Access'.MaximumPasswordAge      = 60
+        $policy.'System Access'.MaximumPasswordAge     = 60
+        $policy.'System Access'.MinimumPasswordAge     = 1
+        $policy.'System Access'.PasswordHistorySize    = 24
+        $policy.'System Access'.MinimumPasswordLength  = 14
+        $policy.'System Access'.PasswordComplexity     = 1
 
         Set-SecurityPolicy -PolicyObject $policy -CfgFile $cfgPath
 
@@ -1990,8 +1992,6 @@ function Start-STIGRemediation {
         @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "AllowCopilot"; Value = 0 },
         @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "EdgeSidebarEnabled"; Value = 0 },
         @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "HubsSidebarEnabled"; Value = 0 },
-        @{ ID = "V-220921"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "LegalNoticeCaption"; Value = "***YARINET SECURITY SYSTEMS***" },
-        @{ ID = "V-220921"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "LegalNoticeText"; Value = "Unauthorized access to this system is prohibited, proceed with caution. Press ENTER to continue." },
         @{ ID = "V-220955"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments'; Name = "SaveZoneInformation"; Value = 1 },
         @{ ID = "V-220858"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments'; Name = "NotifyAntivirus"; Value = 1 },
         @{ ID = "V-220951"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "EnableVirtualization"; Value = 1 },
@@ -2067,7 +2067,7 @@ function Start-STIGRemediation {
         @{ ID = "V-252903"; Path = 'HKLM:\System\CurrentControlSet\Control\DeviceGuard'; Name = "RequirePlatformSecurityFeatures"; Value = 1; },
         @{ ID = "V-252903"; Path = 'HKLM:\System\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity'; Name = "Enabled"; Value = 1; },
         @{ ID = "V-252903"; Path = 'HKLM:\System\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity'; Name = "Locked"; Value = 1; },
-        @{ ID = "V-220917"; Path = 'HKLM:\System\CurrentControlSet\Services\NetLogon\Parameters'; Name = "DisablePasswordChange"; Value = 1; },
+        @{ ID = "V-220917"; Path = 'HKLM:\System\CurrentControlSet\Services\NetLogon\Parameters'; Name = "DisablePasswordChange"; Value = 0; },
         @{ ID = "V-220922"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "DisableCAD"; Value = 0; },
         @{ ID = "V-220829"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlay"; Value = 1 },
         @{ ID = "V-220827"; Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'; Name = "NoAutoPlayfornonVolume"; Value = 1 },
@@ -2184,6 +2184,7 @@ function Start-STIGRemediation {
 Start-STIGRemediation
 
 #END-REGION
+
 
 
 
