@@ -1987,6 +1987,9 @@ function Start-STIGRemediation {
         @{ ID = "V-220794"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization'; Name = "NoLockScreenSlideshow"; Value = 1 },
         @{ ID = "V-220736"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Bluetooth'; Name = "AllowPromptedConnections"; Value = 1 },
         @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'; Name = "TurnOffWindowsCopilot"; Value = 1 },
+        @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "AllowCopilot"; Value = 0 },
+        @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "EdgeSidebarEnabled"; Value = 0 },
+        @{ ID = "V-268315"; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Name = "HubsSidebarEnabled"; Value = 0 },
         @{ ID = "V-220921"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "LegalNoticeCaption"; Value = "***YARINET SECURITY SYSTEMS***" },
         @{ ID = "V-220921"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "LegalNoticeText"; Value = "Unauthorized access to this system is prohibited, proceed with caution. Press ENTER to continue." },
         @{ ID = "V-220955"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments'; Name = "SaveZoneInformation"; Value = 1 },
@@ -2181,4 +2184,5 @@ function Start-STIGRemediation {
 Start-STIGRemediation
 
 #END-REGION
+
 
