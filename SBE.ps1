@@ -1997,7 +1997,7 @@ function Start-STIGRemediation {
         @{ ID = "V-220951"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "EnableVirtualization"; Value = 1 },
         @{ ID = "V-220950"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "EnableLUA"; Value = 1 },
         @{ ID = "V-220949"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "ValidateAdminCodeSignatures"; Value = 1 },
-        @{ ID = "V-220948"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "ConsentPromptBehaviorAdmin"; Value = 1 },
+        @{ ID = "V-220948"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "ConsentPromptBehaviorAdmin"; Value = 2 },
         @{ ID = "V-220945"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "ConsentPromptBehaviorAdmin"; Value = 2 },
         @{ ID = "V-220947"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "ConsentPromptBehaviorUser"; Value = 0 },
         @{ ID = "V-220944"; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = "FilterAdministratorToken"; Value = 1 },
@@ -2184,5 +2184,6 @@ function Start-STIGRemediation {
 Start-STIGRemediation
 
 #END-REGION
+
 
 
