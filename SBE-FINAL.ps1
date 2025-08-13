@@ -2111,11 +2111,11 @@ function Start-STIGRemediation {
     Invoke-AuditPolicyBaseline
     Invoke-LocalAdminPasswordExpiration
     Remove-UnauthorizedScheduledTasks
-    Remove-UnauthorizedAdministrators
-    Remove-UnauthorizedAccountsAndServices
-    Remove-LocalAccounts
+    #Remove-UnauthorizedAdministrators
+    #Remove-UnauthorizedAccountsAndServices
+    #Remove-LocalAccounts
     Remove-IISFeatures
-    Remove-AgedAccounts
+    #Remove-AgedAccounts
     Remove-TFTPClient
     Remove-TelnetClient
     Remove-TCPIPServices
