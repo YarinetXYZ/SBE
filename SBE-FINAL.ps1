@@ -491,7 +491,7 @@ function Invoke-SecurityPolicyBaseline {
     )
 
     try {
-        $url = "https://raw.githubusercontent.com/YarinetXYZ/SBE/main/secpol.cfg"
+        $url = "https://raw.githubusercontent.com/YarinetXYZ/SBE/main/SECPOL-FINAL.cfg"
         $cfgPath = "C:\Temp\SecurityConfig.inf"
 
         Write-Log "Downloading baseline config from: $url" "INFO"
