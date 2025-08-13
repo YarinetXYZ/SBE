@@ -23,7 +23,7 @@ $script:Config = @{
         "BUILTIN\Administrators",
         "$computerName\Administrator",
         "$computerName\LocalAdmin",
-        "$computerName\Yarinet"
+        "$computerName\yrn-admin"
     )
 
     TaskExclusionList = @(
